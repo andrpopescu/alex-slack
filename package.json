@@ -10,6 +10,7 @@
   "author": "keoghpe",
   "license": "MIT",
   "dependencies": {
+    "@slack/bolt": "^3.13.1",
     "alex": "^1.1.0",
     "slack-client": "^1.4.1"
   }
