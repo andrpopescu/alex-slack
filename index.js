@@ -1,57 +1,70 @@
 var Slack, autoMark, autoReconnect, slack, token;
 
-Slack = require('slack-client');
+const { App } = require('@slack/bolt');
 Alex = require('alex');
 var http = require('http');
 
-token = process.env.ALEX_TOKEN;
 
-autoReconnect = true;
-
-autoMark = true;
-
-slack = new Slack(token, autoReconnect, autoMark);
-
-slack.on('open', function() {
-  var channel, channels, group, groups, id, messages, unreads;
-  channels = [];
-  groups = [];
-  unreads = slack.getUnreadCount();
-  channels = (function() {
-    var ref, results;
-    ref = slack.channels;
-    results = [];
-    for (id in ref) {
-      channel = ref[id];
-      if (channel.is_member) {
-        results.push("#" + channel.name);
-      }
-    }
-    return results;
-  })();
-  groups = (function() {
-    var ref, results;
-    ref = slack.groups;
-    results = [];
-    for (id in ref) {
-      group = ref[id];
-      if (group.is_open && !group.is_archived) {
-        results.push(group.name);
-      }
-    }
-    return results;
-  })();
-  console.log("Welcome to Slack. You are @" + slack.self.name + " of " + slack.team.name);
-  console.log('You are in: ' + channels.join(', '));
-  console.log('As well as: ' + groups.join(', '));
-  messages = unreads === 1 ? 'message' : 'messages';
-  return console.log("You have " + unreads + " unread " + messages);
+// Initializes your app in socket mode with your app token and signing secret
+const app = new App({
+  token: process.env.SLACK_BOT_TOKEN,
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
+  socketMode: true, // add this
+  appToken: process.env.SLACK_APP_TOKEN // add this
 });
 
-slack.on('message', function(message) {
-  var channel, channelError, channelName, errors, response, text, textError, ts, type, typeError, user, userName;
-  channel = slack.getChannelGroupOrDMByID(message.channel);
-  user = slack.getUserByID(message.user);
+
+// slack.on('open', function() {
+//   var channel, channels, group, groups, id, messages, unreads;
+//   channels = [];
+//   groups = [];
+//   unreads = slack.getUnreadCount();
+//   channels = (function() {
+//     var ref, results;
+//     ref = slack.channels;
+//     results = [];
+//     for (id in ref) {
+//       channel = ref[id];
+//       if (channel.is_member) {
+//         results.push("#" + channel.name);
+//       }
+//     }
+//     return results;
+//   })();
+//   groups = (function() {
+//     var ref, results;
+//     ref = slack.groups;
+//     results = [];
+//     for (id in ref) {
+//       group = ref[id];
+//       if (group.is_open && !group.is_archived) {
+//         results.push(group.name);
+//       }
+//     }
+//     return results;
+//   })();
+//   console.log("Welcome to Slack. You are @" + slack.self.name + " of " + slack.team.name);
+//   console.log('You are in: ' + channels.join(', '));
+//   console.log('As well as: ' + groups.join(', '));
+//   messages = unreads === 1 ? 'message' : 'messages';
+//   return console.log("You have " + unreads + " unread " + messages);
+// });
+
+
+// Listens to incoming messages that contain "hello"
+app.message('', async (request) => {
+  let { message, client,context } = request;
+  let botInfoResp=await client.users.info({user:context.botUserId})
+  let botInfo=botInfoResp.user
+  // say() sends a message to the channel where the event was triggered
+  var channelError, channelName, errors, response, text, textError, ts, type, typeError, userName;
+  let userResp =await  client.users.info({user:message.user});
+  let channelDetailResp= await client.conversations.info({
+    "channel":message.channel
+  })
+  let channel=channelDetailResp.channel
+
+  let user=userResp.user;
   response = '';
   type = message.type, ts = message.ts, text = message.text;
   channelName = (channel != null ? channel.is_channel : void 0) ? '#' : '';
@@ -67,8 +80,8 @@ slack.on('message', function(message) {
         response += Alex(text).messages[i].reason + '\n';
       };
 
-      channel.send(response);
-      return console.log("@" + slack.self.name + " responded with \"" + response + "\"");
+      client.chat.postMessage({text:response,channel:channel.id});
+      return console.log("@" + botInfo.profile.real_name+ " responded with \"" + response + "\"");
     }
   } else {
     typeError = type !== 'message' ? "unexpected type " + type + "." : null;
@@ -77,17 +90,16 @@ slack.on('message', function(message) {
     errors = [typeError, textError, channelError].filter(function(element) {
       return element !== null;
     }).join(' ');
-    return console.log("@" + slack.self.name + " could not respond. " + errors);
+    return console.log("@" + botInfo.profile.real_name + " could not respond. " + errors);
   }
 });
 
-slack.on('error', function(error) {
-  return console.error("Error: " + error);
-});
+(async () => {
+  await app.start();
+  console.log('⚡️ Bolt app started');
+})();
 
-slack.login();
-
-// Heroku requires the process to bind to this port within 60 seconds or it is killed
-http.createServer(function(req, res) {
-  res.end('ALEX_SLACK_BOT');
-}).listen(process.env.PORT || 5000)
+// // Heroku requires the process to bind to this port within 60 seconds or it is killed
+ http.createServer(function(req, res) {
+   res.end('ALEX_SLACK_BOT');
+ }).listen(process.env.PORT || 5000)
